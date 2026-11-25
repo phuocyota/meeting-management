@@ -25,11 +25,6 @@ export function numberEnv(name: string, fallback: number): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-/** `PORT` trong .env dùng chung là cổng của CRM, nên meeting dùng biến riêng. */
-export function meetingPort(): number {
-  return numberEnv('MEETING_PORT', 3010);
-}
-
 /** Tên database của CRM, đọc trực tiếp từ .env dùng chung (`ENV_FILE`); `undefined` nếu không đọc được. */
 export function crmDatabaseName(
   env: NodeJS.ProcessEnv = process.env,

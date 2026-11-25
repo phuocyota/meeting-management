@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { databaseOptions, envFilePaths, meetingPort } from './env';
+import { databaseOptions, envFilePaths } from './env';
 
 const root = resolve(__dirname, '..', '..');
 
@@ -23,13 +23,6 @@ describe('env', () => {
     expect(envFilePaths({ ENV_FILE: 'shared/.env' })[1]).toBe(
       resolve(root, 'shared/.env'),
     );
-  });
-
-  it('không dùng PORT của CRM làm cổng meeting', () => {
-    process.env = { PORT: '3004' };
-    expect(meetingPort()).toBe(3010);
-    process.env = { MEETING_PORT: '3020' };
-    expect(meetingPort()).toBe(3020);
   });
 
   it('DB meeting dùng chung server với CRM nhưng database riêng, không được trùng DB CRM', () => {

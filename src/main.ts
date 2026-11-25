@@ -2,7 +2,6 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { meetingPort } from './config/env';
 import { configureHttpApplication } from './http-app';
 
 async function bootstrap() {
@@ -37,6 +36,7 @@ async function bootstrap() {
   );
 
   // ConfigModule đã nạp .env khi tạo app, nên đọc cổng sau NestFactory.create.
-  await app.listen(meetingPort());
+  // .env của CRM cũng có PORT (3004): production đặt PORT trong ecosystem.config.js để không trùng.
+  await app.listen(process.env.PORT || 3005);
 }
 void bootstrap();

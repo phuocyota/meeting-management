@@ -1,4 +1,4 @@
-// Cấu hình PM2 cho meeting-management. Cổng lấy từ MEETING_PORT (không dùng PORT: đó là cổng của CRM).
+// Cấu hình PM2 cho meeting-management. Cổng lấy theo PORT trong env (meeting-management/.env).
 module.exports = {
   apps: [
     {

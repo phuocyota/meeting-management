@@ -1,0 +1,56 @@
+import { resolve } from 'node:path';
+import { databaseOptions, envFilePaths, meetingPort } from './env';
+
+const root = resolve(__dirname, '..', '..');
+
+describe('env', () => {
+  const originalEnv = process.env;
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('ưu tiên .env riêng, sau đó tới .env của CRM cạnh repo', () => {
+    expect(envFilePaths({})).toEqual([
+      resolve(root, '.env'),
+      resolve(root, '../di-ichi-crm-services/.env'),
+    ]);
+  });
+
+  it('cho phép đổi đường dẫn .env dùng chung bằng ENV_FILE', () => {
+    expect(envFilePaths({ ENV_FILE: '/srv/crm/.env' })[1]).toBe(
+      '/srv/crm/.env',
+    );
+    expect(envFilePaths({ ENV_FILE: 'shared/.env' })[1]).toBe(
+      resolve(root, 'shared/.env'),
+    );
+  });
+
+  it('không dùng PORT của CRM làm cổng meeting', () => {
+    process.env = { PORT: '3004' };
+    expect(meetingPort()).toBe(3010);
+    process.env = { MEETING_PORT: '3020' };
+    expect(meetingPort()).toBe(3020);
+  });
+
+  it('DB meeting dùng chung server với CRM nhưng database riêng, không được trùng DB CRM', () => {
+    const crm = {
+      DB_HOST: 'pg.local',
+      DB_PORT: '5433',
+      DB_USERNAME: 'crm',
+      DB_PASSWORD: 'secret',
+      DB_DATABASE: 'di_ichi_crm',
+    };
+    expect(databaseOptions(crm)).toMatchObject({
+      host: 'pg.local',
+      port: 5433,
+      username: 'crm',
+      database: 'diichi_meeting',
+    });
+    expect(
+      databaseOptions({ ...crm, MEETING_DB_USERNAME: 'meeting' }).username,
+    ).toBe('meeting');
+    expect(() =>
+      databaseOptions({ ...crm, MEETING_DB_DATABASE: 'di_ichi_crm' }),
+    ).toThrow(/database riêng/);
+  });
+});

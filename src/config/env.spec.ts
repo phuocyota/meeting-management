@@ -1,5 +1,10 @@
 import { resolve } from 'node:path';
-import { databaseOptions, envFilePaths } from './env';
+import {
+  databaseOptions,
+  envFilePaths,
+  liveKitWebhookCredentials,
+  validateEnv,
+} from './env';
 
 const root = resolve(__dirname, '..', '..');
 
@@ -7,6 +12,41 @@ describe('env', () => {
   const originalEnv = process.env;
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  it('khóa webhook tách khỏi LIVEKIT_API_*', () => {
+    expect(
+      liveKitWebhookCredentials({
+        LIVEKIT_API_KEY: 'api',
+        LIVEKIT_API_SECRET: 'api-secret',
+      }),
+    ).toBeNull();
+    expect(
+      liveKitWebhookCredentials({
+        LIVEKIT_API_KEY: 'api',
+        LIVEKIT_API_SECRET: 'api-secret',
+        LIVEKIT_WEBHOOK_API_KEY: ' hook ',
+        LIVEKIT_WEBHOOK_API_SECRET: 'hook-secret',
+      }),
+    ).toEqual({ apiKey: 'hook', apiSecret: 'hook-secret' });
+  });
+
+  it('validateEnv từ chối cấu hình webhook thiếu cặp, rỗng hoặc có khoảng trắng', () => {
+    expect(validateEnv({})).toEqual({});
+    const ok = {
+      LIVEKIT_WEBHOOK_API_KEY: 'hook',
+      LIVEKIT_WEBHOOK_API_SECRET: 'hook-secret',
+    };
+    expect(validateEnv(ok)).toBe(ok);
+    expect(() => validateEnv({ LIVEKIT_WEBHOOK_API_KEY: 'hook' })).toThrow(
+      'Phải đặt đủ cả LIVEKIT_WEBHOOK_API_KEY và LIVEKIT_WEBHOOK_API_SECRET',
+    );
+    expect(() =>
+      validateEnv({ ...ok, LIVEKIT_WEBHOOK_API_SECRET: '  ' }),
+    ).toThrow('LIVEKIT_WEBHOOK_API_SECRET không được để trống');
+    expect(() =>
+      validateEnv({ ...ok, LIVEKIT_WEBHOOK_API_KEY: 'ho ok' }),
+    ).toThrow('LIVEKIT_WEBHOOK_API_KEY không được chứa khoảng trắng');
   });
 
   it('ưu tiên .env riêng, sau đó tới .env của CRM cạnh repo', () => {

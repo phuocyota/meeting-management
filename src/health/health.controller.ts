@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
 import { Public } from '../auth/decorators';
+import { liveKitWebhookCredentials } from '../config/env';
 
 @ApiTags('Hệ thống')
 @Controller('health')
@@ -26,6 +27,14 @@ export class HealthController {
           process.env.LIVEKIT_API_SECRET &&
           process.env.LIVEKIT_PUBLIC_URL,
         ),
+        // Không ảnh hưởng status: cuộc họp vẫn chạy được khi thiếu webhook.
+        livekitWebhook: (() => {
+          try {
+            return liveKitWebhookCredentials() !== null;
+          } catch {
+            return false;
+          }
+        })(),
         jwtSecret: (process.env.MEETING_JWT_SECRET?.trim().length ?? 0) >= 32,
       },
     };

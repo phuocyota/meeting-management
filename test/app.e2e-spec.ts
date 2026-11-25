@@ -13,9 +13,15 @@ import { createTestDataSource } from './support/pg-mem';
 
 const API_KEY = 'e2e-key';
 const API_SECRET = 'e2e-secret-that-is-long-enough-for-hs256';
+const WEBHOOK_KEY = 'e2e-webhook-key';
+const WEBHOOK_SECRET = 'e2e-webhook-secret-that-is-long-enough';
 
-async function signWebhook(body: string, secret = API_SECRET) {
-  const token = new AccessToken(API_KEY, secret);
+async function signWebhook(
+  body: string,
+  secret = WEBHOOK_SECRET,
+  key = WEBHOOK_KEY,
+) {
+  const token = new AccessToken(key, secret);
   token.sha256 = createHash('sha256').update(body).digest('base64');
   return token.toJwt();
 }
@@ -38,6 +44,8 @@ describe('Meeting service (e2e)', () => {
     process.env.LIVEKIT_API_KEY = API_KEY;
     process.env.LIVEKIT_API_SECRET = API_SECRET;
     process.env.LIVEKIT_PUBLIC_URL = 'wss://livekit.example';
+    process.env.LIVEKIT_WEBHOOK_API_KEY = WEBHOOK_KEY;
+    process.env.LIVEKIT_WEBHOOK_API_SECRET = WEBHOOK_SECRET;
     process.env.MEETING_JWT_SECRET = 'e2e-meeting-secret-that-is-long-enough';
     dataSource = await createTestDataSource();
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -89,6 +97,28 @@ describe('Meeting service (e2e)', () => {
       .set('Authorization', await signWebhook(body))
       .send(body)
       .expect(200, { received: true });
+  });
+
+  it('/livekit/webhook không chấp nhận chữ ký bằng cặp LIVEKIT_API_*', async () => {
+    const body = JSON.stringify({ event: 'room_started' });
+    await request(app.getHttpServer())
+      .post('/livekit/webhook')
+      .set('Content-Type', 'application/webhook+json')
+      .set('Authorization', await signWebhook(body, API_SECRET, API_KEY))
+      .send(body)
+      .expect(401);
+  });
+
+  it('/livekit/webhook trả 503 khi chưa cấu hình khóa webhook', async () => {
+    delete process.env.LIVEKIT_WEBHOOK_API_KEY;
+    delete process.env.LIVEKIT_WEBHOOK_API_SECRET;
+    const body = JSON.stringify({ event: 'room_started' });
+    await request(app.getHttpServer())
+      .post('/livekit/webhook')
+      .set('Content-Type', 'application/webhook+json')
+      .set('Authorization', await signWebhook(body))
+      .send(body)
+      .expect(503);
   });
 
   it('/livekit/webhook từ chối chữ ký sai', async () => {

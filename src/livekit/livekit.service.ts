@@ -21,7 +21,7 @@ import {
   type WebhookEvent,
   WebhookReceiver,
 } from 'livekit-server-sdk';
-import { numberEnv } from '../config/env';
+import { liveKitWebhookCredentials, numberEnv } from '../config/env';
 
 interface LiveKitCredentials {
   apiKey: string;
@@ -223,12 +223,25 @@ export class LiveKitService {
     };
   }
 
-  /** Xác minh chữ ký webhook bằng cặp LIVEKIT_API_KEY/SECRET dùng chung. */
+  /**
+   * Xác minh chữ ký webhook bằng cặp riêng LIVEKIT_WEBHOOK_API_KEY/SECRET (LiveKit server ký mọi
+   * webhook bằng `webhook.api_key`), không dùng cặp LIVEKIT_API_* để gọi API và sinh token.
+   */
   async receiveWebhook(
     body: string,
     authorization?: string,
   ): Promise<WebhookEvent> {
-    const { apiKey, apiSecret } = this.credentials();
+    const credentials = liveKitWebhookCredentials();
+    if (!credentials) {
+      this.logger.error(
+        'Nhận webhook nhưng chưa cấu hình LIVEKIT_WEBHOOK_API_KEY/LIVEKIT_WEBHOOK_API_SECRET',
+      );
+      // 503 để LiveKit server gửi lại sau khi đã cấu hình.
+      throw new ServiceUnavailableException(
+        'Webhook LiveKit chưa được cấu hình',
+      );
+    }
+    const { apiKey, apiSecret } = credentials;
     try {
       return await new WebhookReceiver(apiKey, apiSecret).receive(
         body,

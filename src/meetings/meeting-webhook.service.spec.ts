@@ -124,6 +124,10 @@ describe('MeetingWebhookService', () => {
   it('bỏ qua phòng của CRM, phòng chưa có trong DB và sự kiện khác', async () => {
     await webhooks.handle(joined(`schedule-${uid(5)}`, uid(2)));
     await webhooks.handle(joined(`meeting-${uid(7)}`, uid(2)));
+    // Tên gần giống phòng meeting nhưng không đúng định dạng: không đọc DB, không gọi LiveKit.
+    for (const name of [`${room}-g-1`, `x${room}`, 'meeting-123', '']) {
+      await webhooks.handle(joined(name, uid(9)));
+    }
     await webhooks.handle({
       event: 'participant_left',
       room: { name: room },

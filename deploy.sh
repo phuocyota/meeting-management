@@ -6,8 +6,12 @@ cd "$(dirname "$0")"
 
 APP_NAME=meeting-management
 
-echo "👉 Pull code..."
-git pull --ff-only
+# git pull có thể sửa chính file này khi bash đang đọc dở; pull xong thì chạy lại bản mới từ đầu.
+if [ -z "${DEPLOY_PULLED:-}" ]; then
+  echo "👉 Pull code..."
+  git pull --ff-only
+  DEPLOY_PULLED=1 exec bash "./$(basename "$0")" "$@"
+fi
 
 echo "👉 Cài/cập nhật dependencies..."
 npm install --no-audit --no-fund

@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
+import { parseEnv } from 'node:util';
 
 /** Thư mục gốc của repo (src/config hoặc dist/config -> ../..). */
 const projectRoot = resolve(__dirname, '..', '..');
@@ -28,15 +30,36 @@ export function meetingPort(): number {
   return numberEnv('MEETING_PORT', 3010);
 }
 
+/** Tên database của CRM, đọc trực tiếp từ .env dùng chung (`ENV_FILE`); `undefined` nếu không đọc được. */
+export function crmDatabaseName(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  try {
+    const shared = parseEnv(readFileSync(envFilePaths(env)[1], 'utf8'));
+    return shared.DB_DATABASE?.trim() || undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
 /**
- * Kết nối DB riêng của meeting: ưu tiên `MEETING_DB_*`, host/port/user/password mặc định theo `DB_*` của CRM
- * (cùng PostgreSQL server), còn tên database luôn riêng và không được trùng database của CRM.
+ * Kết nối DB riêng của meeting: ưu tiên `MEETING_DB_*`, sau đó `DB_*` (cùng PostgreSQL server với CRM).
+ * Tên database lấy theo `MEETING_DB_DATABASE`, rồi `DB_DATABASE` (thường đặt trong `meeting-management/.env`),
+ * nhưng bỏ qua `DB_DATABASE` nếu đó là database của CRM (khi .env riêng không đặt), và không bao giờ được trùng DB CRM.
  */
-export function databaseOptions(env: NodeJS.ProcessEnv = process.env) {
+export function databaseOptions(
+  env: NodeJS.ProcessEnv = process.env,
+  crmDatabase: string | undefined = crmDatabaseName(env),
+) {
   const pick = (own: string, shared: string, fallback: string) =>
     env[own]?.trim() || env[shared]?.trim() || fallback;
-  const database = env.MEETING_DB_DATABASE?.trim() || 'diichi_meeting';
-  if (env.DB_DATABASE?.trim() && database === env.DB_DATABASE.trim()) {
+  const shared = env.DB_DATABASE?.trim();
+  const database =
+    env.MEETING_DB_DATABASE?.trim() ||
+    (shared && shared !== crmDatabase ? shared : undefined) ||
+    'diichi_meeting';
+  if (crmDatabase && database === crmDatabase) {
     throw new Error(
       'MEETING_DB_DATABASE không được trùng DB_DATABASE của CRM; meeting phải dùng database riêng',
     );

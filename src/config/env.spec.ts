@@ -40,17 +40,33 @@ describe('env', () => {
       DB_PASSWORD: 'secret',
       DB_DATABASE: 'di_ichi_crm',
     };
-    expect(databaseOptions(crm)).toMatchObject({
+    const crmDb = 'di_ichi_crm';
+    // DB_DATABASE là của CRM (.env riêng không đặt) -> dùng tên mặc định.
+    expect(databaseOptions(crm, crmDb)).toMatchObject({
       host: 'pg.local',
       port: 5433,
       username: 'crm',
       database: 'diichi_meeting',
     });
     expect(
-      databaseOptions({ ...crm, MEETING_DB_USERNAME: 'meeting' }).username,
+      databaseOptions({ ...crm, MEETING_DB_USERNAME: 'meeting' }, crmDb)
+        .username,
     ).toBe('meeting');
     expect(() =>
-      databaseOptions({ ...crm, MEETING_DB_DATABASE: 'di_ichi_crm' }),
+      databaseOptions({ ...crm, MEETING_DB_DATABASE: crmDb }, crmDb),
     ).toThrow(/database riêng/);
+  });
+
+  it('lấy tên database theo DB_DATABASE trong .env riêng của meeting', () => {
+    const env = { DB_HOST: 'pg.local', DB_DATABASE: 'di-ichi-meeting' };
+    expect(databaseOptions(env, 'di_ichi_crm').database).toBe(
+      'di-ichi-meeting',
+    );
+    expect(
+      databaseOptions(
+        { ...env, MEETING_DB_DATABASE: 'meeting_override' },
+        'di_ichi_crm',
+      ).database,
+    ).toBe('meeting_override');
   });
 });

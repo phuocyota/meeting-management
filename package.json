@@ -23,7 +23,7 @@
     "migration:run": "npm run typeorm -- migration:run",
     "user:create": "node -r ts-node/register src/cli/create-user.ts",
     "migration:revert": "npm run typeorm -- migration:revert",
-    "test:migrations": "node --test -r ts-node/register test/create-meetings.migration.integration.ts test/add-meeting-controls.migration.integration.ts test/add-users-and-guests.migration.integration.ts"
+    "test:migrations": "node --test -r ts-node/register test/create-meetings.migration.integration.ts test/add-meeting-controls.migration.integration.ts test/add-users-and-guests.migration.integration.ts test/allow-guest-cohost.migration.integration.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

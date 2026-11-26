@@ -44,7 +44,7 @@ export class MeetingMemberEntity {
   })
   displayName: string | null;
 
-  /** Khách vào bằng tên, không có tài khoản; chỉ được là người tham gia thường. */
+  /** Khách vào bằng tên, không có tài khoản; làm được đồng chủ trì nhưng không làm chủ trì. */
   @Column({ name: 'is_guest', type: 'boolean', default: false })
   isGuest: boolean;
 

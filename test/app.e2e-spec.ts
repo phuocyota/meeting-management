@@ -208,5 +208,24 @@ describe('Meeting service (e2e)', () => {
       status: 'admitted',
       role: 'participant',
     });
+
+    // Khách được cấp đồng chủ trì thì gọi được API admin của cuộc họp đó.
+    await request(app.getHttpServer())
+      .put(`/meetings/${meetingId}/cohosts/${guestBody.guest.id}`)
+      .set(auth)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/meetings/${meetingId}/members`)
+      .set(guestAuth)
+      .expect(200);
+    // Nhưng không chuyển chủ trì được, và vẫn không dùng được ngoài cuộc họp.
+    await request(app.getHttpServer())
+      .put(`/meetings/${meetingId}/host/${guestBody.guest.id}`)
+      .set(guestAuth)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/meetings')
+      .set(guestAuth)
+      .expect(403);
   });
 });

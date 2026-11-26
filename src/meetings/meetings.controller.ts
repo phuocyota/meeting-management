@@ -22,9 +22,11 @@ import {
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { MeetingsService } from './meetings.service';
 
-/** userId (tài khoản hoặc khách) là uuid chữ thường, cũng là identity trong LiveKit. */
-const lower = (value: string) => value.toLowerCase();
+/** userId (tài khoản hoặc khách) là uuid chữ thường, cũng là identity trong LiveKit. */ const lower =
+  (value: string) => value.toLowerCase();
 
+// Route admin có @AllowGuest vì khách làm được đồng chủ trì; service vẫn kiểm vai trò theo DB (assertAdmin).
+// Riêng chuyển chủ trì không mở cho khách: khách không bao giờ là chủ trì.
 @ApiTags('Cuộc họp')
 @ApiBearerAuth('access-token')
 @Controller('meetings')
@@ -78,6 +80,7 @@ export class MeetingsController {
     return this.meetings.guestJoin(lower(id), dto.name);
   }
 
+  @AllowGuest()
   @Delete(':id')
   @ApiOperation({ summary: 'Admin kết thúc cuộc họp cho tất cả' })
   end(
@@ -100,6 +103,7 @@ export class MeetingsController {
     return this.meetings.getRoom(user, lower(id));
   }
 
+  @AllowGuest()
   @Patch(':id/settings')
   @ApiOperation({
     summary:
@@ -113,6 +117,7 @@ export class MeetingsController {
     return this.meetings.updateSettings(user, lower(id), dto);
   }
 
+  @AllowGuest()
   @Post(':id/lobby/admit-all')
   @ApiOperation({ summary: 'Admin duyệt tất cả người trong phòng chờ' })
   admitAll(
@@ -122,6 +127,7 @@ export class MeetingsController {
     return this.meetings.admitAll(user, lower(id));
   }
 
+  @AllowGuest()
   @Post(':id/mute-all')
   @ApiOperation({
     summary:
@@ -155,6 +161,7 @@ export class MeetingsController {
     return this.meetings.lowerHand(user, lower(id), user.userId);
   }
 
+  @AllowGuest()
   @Delete(':id/hands')
   @ApiOperation({ summary: 'Admin hạ tay tất cả' })
   lowerAllHands(
@@ -164,6 +171,7 @@ export class MeetingsController {
     return this.meetings.lowerAllHands(user, lower(id));
   }
 
+  @AllowGuest()
   @Delete(':id/members/:userId/hand')
   @ApiOperation({ summary: 'Admin hạ tay giúp một người' })
   lowerHand(
@@ -187,6 +195,7 @@ export class MeetingsController {
     return this.meetings.transferHost(user, lower(id), lower(userId));
   }
 
+  @AllowGuest()
   @Get(':id/members')
   @ApiOperation({
     summary: 'Admin xem thành viên; status=pending là phòng chờ',
@@ -199,6 +208,7 @@ export class MeetingsController {
     return this.meetings.listMembers(user, lower(id), query.status);
   }
 
+  @AllowGuest()
   @Post(':id/members/:userId/admit')
   @ApiOperation({
     summary: 'Admin duyệt người vào (kể cả người đã bị từ chối/mời ra)',
@@ -211,6 +221,7 @@ export class MeetingsController {
     return this.meetings.admit(user, lower(id), lower(userId));
   }
 
+  @AllowGuest()
   @Post(':id/members/:userId/deny')
   @ApiOperation({ summary: 'Admin từ chối người trong phòng chờ' })
   deny(
@@ -221,6 +232,7 @@ export class MeetingsController {
     return this.meetings.deny(user, lower(id), lower(userId));
   }
 
+  @AllowGuest()
   @Post(':id/members/:userId/kick')
   @ApiOperation({ summary: 'Admin mời người tham gia ra khỏi cuộc họp' })
   kick(
@@ -231,6 +243,7 @@ export class MeetingsController {
     return this.meetings.kick(user, lower(id), lower(userId));
   }
 
+  @AllowGuest()
   @Post(':id/members/:userId/mute')
   @ApiOperation({ summary: 'Admin tắt mic/camera đang phát của một người' })
   mute(
@@ -242,6 +255,7 @@ export class MeetingsController {
     return this.meetings.mute(user, lower(id), lower(userId), dto);
   }
 
+  @AllowGuest()
   @Put(':id/members/:userId/publish')
   @ApiOperation({
     summary: 'Admin khóa hoặc mở quyền phát mic/camera/màn hình',
@@ -260,8 +274,12 @@ export class MeetingsController {
     );
   }
 
+  @AllowGuest()
   @Put(':id/cohosts/:userId')
-  @ApiOperation({ summary: 'Admin chỉ định đồng chủ trì' })
+  @ApiOperation({
+    summary:
+      'Admin chỉ định đồng chủ trì (tài khoản hoặc khách đã có trong cuộc họp)',
+  })
   grantCohost(
     @CurrentUser() user: MeetingUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -270,6 +288,7 @@ export class MeetingsController {
     return this.meetings.grantCohost(user, lower(id), lower(userId));
   }
 
+  @AllowGuest()
   @Delete(':id/cohosts/:userId')
   @ApiOperation({ summary: 'Admin thu hồi quyền đồng chủ trì' })
   revokeCohost(

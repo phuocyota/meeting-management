@@ -197,15 +197,35 @@ describe('MeetingsService', () => {
       );
     });
 
-    it('khách không làm đồng chủ trì hay chủ trì được', async () => {
-      const id = await createMeeting({ waitingRoom: false });
+    it('khách làm được đồng chủ trì và dùng quyền admin, nhưng không làm chủ trì', async () => {
+      const id = await createMeeting({ waitingRoom: true });
       const { guest } = await service.guestJoin(id, 'Khách');
+      const guestUser: MeetingUser = {
+        userId: guest!.id,
+        name: 'Khách',
+        kind: 'guest',
+        meetingId: id,
+      };
+      // Đang ở phòng chờ: cấp đồng chủ trì thì vào thẳng.
       await expect(
         service.grantCohost(HOST, id, guest!.id),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).resolves.toMatchObject({ role: 'cohost', status: 'admitted' });
+      await expect(service.join(guestUser, id)).resolves.toMatchObject({
+        status: 'admitted',
+        role: 'cohost',
+      });
+      await service.join(GUEST, id);
+      await expect(
+        service.admit(guestUser, id, GUEST.userId),
+      ).resolves.toMatchObject({ status: 'admitted' });
       await expect(
         service.transferHost(HOST, id, guest!.id),
       ).rejects.toBeInstanceOf(ConflictException);
+      // Thu hồi xong thì mất quyền admin ngay.
+      await service.revokeCohost(HOST, id, guest!.id);
+      await expect(service.listMembers(guestUser, id)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
       // Người chưa từng vào và không có tài khoản: không cấp được.
       await expect(
         service.grantCohost(HOST, id, uid(99)),

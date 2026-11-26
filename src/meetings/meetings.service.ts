@@ -440,7 +440,10 @@ export class MeetingsService {
     return { ...toMemberView(member), applied };
   }
 
-  /** Chỉ định đồng chủ trì; người được chỉ định vào thẳng, không qua phòng chờ. */
+  /**
+   * Chỉ định đồng chủ trì (tài khoản, hoặc khách đã có trong cuộc họp); người được chỉ định vào thẳng,
+   * không qua phòng chờ.
+   */
   async grantCohost(user: MeetingUser, id: string, targetId: string) {
     const { meeting, member } = await this.adminPhase(user, id, async (m) => {
       const members = m.getRepository(MeetingMemberEntity);
@@ -450,9 +453,6 @@ export class MeetingsService {
       });
       if (existing?.role === 'host') {
         throw new ConflictException('Người này là chủ trì');
-      }
-      if (existing?.isGuest) {
-        throw new ConflictException('Khách không thể làm đồng chủ trì');
       }
       const account = existing
         ? null

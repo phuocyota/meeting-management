@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -658,6 +659,96 @@ describe('MeetingsService', () => {
       // Chủ trì mới không bị mời ra được, chủ trì cũ giờ là đồng chủ trì.
       await expect(service.kick(HOST, id, GUEST.userId)).rejects.toBeInstanceOf(
         ForbiddenException,
+      );
+    });
+  });
+  describe('lên lịch họp', () => {
+    const inOneHour = () => new Date(Date.now() + 60 * 60 * 1000);
+    const schedule = () =>
+      service.schedule(HOST, {
+        title: 'Họp kế hoạch',
+        coHostIds: [COHOST.userId],
+        scheduledAt: inOneHour(),
+      });
+    /** Giả lập đã tới giờ hẹn. */
+    const reachStart = (id: string) =>
+      dataSource
+        .getRepository(MeetingEntity)
+        .update({ id }, { scheduledAt: new Date(Date.now() - 1000) });
+
+    it('lưu giờ hẹn, tắt phòng chờ, trả link cuộc họp; chưa tạo phòng LiveKit hay cấp token', async () => {
+      process.env.MEETING_FE_URL = 'https://meet.example.com/';
+      const meeting = await schedule();
+      delete process.env.MEETING_FE_URL;
+      expect(meeting.joinUrl).toBe(
+        `https://meet.example.com/meeting/${meeting.id}`,
+      );
+      expect(meeting).toMatchObject({
+        myRole: 'host',
+        waitingRoom: false,
+        status: 'active',
+      });
+      expect(meeting.scheduledAt).toBeInstanceOf(Date);
+      expect(lk.calls.rooms).toHaveLength(0);
+      expect(lk.calls.tokens).toHaveLength(0);
+      expect((await member(meeting.id, COHOST)).role).toBe('cohost');
+      const mine = await service.listMine(HOST);
+      expect(mine.map((m) => m.id)).toEqual([meeting.id]);
+    });
+
+    it('giờ hẹn phải ở tương lai; khách không lên lịch được', async () => {
+      await expect(
+        service.schedule(HOST, {
+          title: 'x',
+          scheduledAt: new Date(Date.now() - 1000),
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.schedule(
+          { userId: uid(50), name: 'Khách', kind: 'guest', meetingId: uid(51) },
+          { title: 'x', scheduledAt: inOneHour() },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('chưa tới giờ: người tham gia và khách nhận not_started, không tạo thành viên; admin vào trước được', async () => {
+      const { id } = await schedule();
+      await expect(service.join(GUEST, id)).resolves.toMatchObject({
+        status: 'not_started',
+      });
+      await expect(service.guestJoin(id, 'Khách')).resolves.toMatchObject({
+        status: 'not_started',
+        guest: null,
+      });
+      expect(await service.listMembers(HOST, id)).toHaveLength(2);
+      expect(lk.calls.tokens).toHaveLength(0);
+
+      await expect(service.join(COHOST, id)).resolves.toMatchObject({
+        status: 'admitted',
+        role: 'cohost',
+      });
+      await expect(service.join(HOST, id)).resolves.toMatchObject({
+        status: 'admitted',
+        role: 'host',
+      });
+    });
+
+    it('tới giờ: tài khoản và khách vào thẳng, không qua phòng chờ', async () => {
+      const { id } = await schedule();
+      await service.join(GUEST, id);
+      await reachStart(id);
+
+      await expect(service.join(GUEST, id)).resolves.toMatchObject({
+        status: 'admitted',
+        role: 'participant',
+      });
+      const guest = await service.guestJoin(id, 'Khách Lan');
+      expect(guest).toMatchObject({
+        status: 'admitted',
+        guest: { name: 'Khách Lan' },
+      });
+      expect(lk.calls.data.filter((d) => d.topic === 'meeting.lobby')).toEqual(
+        [],
       );
     });
   });

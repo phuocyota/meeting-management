@@ -1,13 +1,18 @@
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
 /** Tài khoản đăng nhập của hệ thống meeting. Khách vào bằng tên không có dòng ở đây. */
+// Ràng buộc khai báo cả ở đây (cùng tên với migration) để synchronize không xoá chúng.
 @Entity('users')
+@Check('chk_users_username_lower', `"username" = lower("username")`)
 export class UserEntity {
   /** Sinh trong ứng dụng; cũng là identity trong LiveKit. */
   @PrimaryColumn('uuid')
@@ -35,4 +40,19 @@ export class UserEntity {
 
   @Column({ name: 'updated_by', type: 'uuid', nullable: true })
   updatedBy: string | null;
+
+  /** Chỉ để khai báo khóa ngoại created_by/updated_by; dùng createdBy/updatedBy để đọc ghi. */
+  @ManyToOne(() => UserEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'created_by',
+    foreignKeyConstraintName: 'fk_users_created_by',
+  })
+  creator?: UserEntity | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'updated_by',
+    foreignKeyConstraintName: 'fk_users_updated_by',
+  })
+  updater?: UserEntity | null;
 }

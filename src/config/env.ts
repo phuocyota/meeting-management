@@ -63,6 +63,32 @@ export function liveKitWebhookCredentials(
   return apiKey && apiSecret ? { apiKey, apiSecret } : null;
 }
 
+const FE_URL = 'MEETING_FE_URL';
+
+function feUrlErrors(env: Record<string, unknown>): string[] {
+  const raw = env[FE_URL];
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const url = new URL(raw.trim());
+    if (url.protocol === 'http:' || url.protocol === 'https:') return [];
+  } catch {
+    /* báo lỗi bên dưới */
+  }
+  return [`${FE_URL} phải là URL http(s), ví dụ https://meet.example.com`];
+}
+
+/**
+ * Link vào cuộc họp trên FE: `<MEETING_FE_URL>/meeting/<id>`; null khi chưa đặt `MEETING_FE_URL`.
+ * Khách thêm `?name=<tên>` để vào thẳng không cần bấm nút.
+ */
+export function meetingJoinUrl(
+  id: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const base = env[FE_URL]?.trim().replace(/\/+$/, '');
+  return base ? `${base}/meeting/${id}` : null;
+}
+
 /**
  * `validate` của ConfigModule: dừng khởi động nếu biến webhook LiveKit cấu hình sai.
  * Thiếu cả hai biến vẫn cho chạy (cuộc họp không phụ thuộc webhook) nhưng webhook trả 503.
@@ -70,13 +96,18 @@ export function liveKitWebhookCredentials(
 export function validateEnv(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
-  const errors = webhookEnvErrors(config);
+  const errors = [...webhookEnvErrors(config), ...feUrlErrors(config)];
   if (errors.length) {
     throw new Error(`Cấu hình môi trường không hợp lệ: ${errors.join('; ')}`);
   }
   if (!liveKitWebhookCredentials(config as NodeJS.ProcessEnv)) {
     new Logger('Config').warn(
       'Chưa đặt LIVEKIT_WEBHOOK_API_KEY/LIVEKIT_WEBHOOK_API_SECRET: /livekit/webhook sẽ trả 503',
+    );
+  }
+  if (typeof config[FE_URL] !== 'string' || !config[FE_URL].trim()) {
+    new Logger('Config').warn(
+      `Chưa đặt ${FE_URL}: joinUrl của cuộc họp sẽ là null`,
     );
   }
   return config;

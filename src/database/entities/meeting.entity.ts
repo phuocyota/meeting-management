@@ -1,4 +1,5 @@
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -11,8 +12,12 @@ import { MeetingMemberEntity } from './meeting-member.entity';
 
 export type MeetingStatus = 'active' | 'ended';
 
+// Ràng buộc khai báo cả ở đây (cùng tên với migration) để synchronize không xoá chúng.
 @Entity('meetings')
 @Index('idx_meetings_host_status', ['hostId', 'status'])
+@Check('chk_meetings_status', `"status" IN ('active', 'ended')`)
+@Check('chk_meetings_ended', `("status" = 'ended') = ("ended_at" IS NOT NULL)`)
+@Check('chk_meetings_max_participants', `"max_participants" BETWEEN 2 AND 500`)
 export class MeetingEntity {
   /** Sinh trong ứng dụng để tên phòng LiveKit `meeting-<id>` có ngay khi tạo. */
   @PrimaryColumn('uuid')
@@ -53,6 +58,10 @@ export class MeetingEntity {
 
   @Column({ type: 'varchar', length: 16, default: 'active' })
   status: MeetingStatus;
+
+  /** Giờ bắt đầu đã hẹn (null: họp ngay). Trước giờ này chỉ chủ trì/đồng chủ trì vào được. */
+  @Column({ name: 'scheduled_at', type: 'timestamptz', nullable: true })
+  scheduledAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

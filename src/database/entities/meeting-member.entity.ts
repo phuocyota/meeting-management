@@ -1,4 +1,5 @@
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -18,9 +19,31 @@ export type MemberStatus = 'pending' | 'admitted' | 'denied' | 'kicked';
 export const isAdminRole = (role: MeetingRole | undefined) =>
   role === 'host' || role === 'cohost';
 
+// Ràng buộc khai báo cả ở đây (cùng tên với migration) để synchronize không xoá chúng.
 @Entity('meeting_members')
 @Index('idx_meeting_members_user', ['userId'])
 @Index('idx_meeting_members_status', ['meetingId', 'status'])
+/** Mỗi cuộc họp chỉ có một chủ trì. */
+@Index('uq_meeting_members_host', ['meetingId'], {
+  unique: true,
+  where: `"role" = 'host'`,
+})
+@Check(
+  'chk_meeting_members_role',
+  `"role" IN ('host', 'cohost', 'participant')`,
+)
+@Check(
+  'chk_meeting_members_status',
+  `"status" IN ('pending', 'admitted', 'denied', 'kicked')`,
+)
+@Check(
+  'chk_meeting_members_admin_admitted',
+  `"role" = 'participant' OR "status" = 'admitted'`,
+)
+@Check(
+  'chk_meeting_members_guest_not_host',
+  `NOT "is_guest" OR "role" <> 'host'`,
+)
 export class MeetingMemberEntity {
   @PrimaryColumn({ name: 'meeting_id', type: 'uuid' })
   meetingId: string;
@@ -70,6 +93,9 @@ export class MeetingMemberEntity {
   @ManyToOne(() => MeetingEntity, (meeting) => meeting.members, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'meeting_id' })
+  @JoinColumn({
+    name: 'meeting_id',
+    foreignKeyConstraintName: 'fk_meeting_members_meeting',
+  })
   meeting?: MeetingEntity;
 }

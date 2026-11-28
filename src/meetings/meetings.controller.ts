@@ -13,7 +13,11 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { MeetingUser } from '../auth/auth.types';
 import { AllowGuest, CurrentUser, Public } from '../auth/decorators';
-import { CreateMeetingDto, GuestJoinDto } from './dto/create-meeting.dto';
+import {
+  CreateMeetingDto,
+  GuestJoinDto,
+  ScheduleMeetingDto,
+} from './dto/create-meeting.dto';
 import {
   ListMembersQueryDto,
   MuteMemberDto,
@@ -41,8 +45,20 @@ export class MeetingsController {
     return this.meetings.create(user, dto);
   }
 
+  @Post('schedule')
+  @ApiOperation({
+    summary:
+      'Lên lịch cuộc họp (người tạo là chủ trì). Không có phòng chờ: tới giờ hẹn ai có link cũng vào thẳng; trước giờ chỉ chủ trì/đồng chủ trì vào được',
+  })
+  schedule(@CurrentUser() user: MeetingUser, @Body() dto: ScheduleMeetingDto) {
+    return this.meetings.schedule(user, dto);
+  }
+
   @Get()
-  @ApiOperation({ summary: 'Các cuộc họp đang diễn ra mà tôi tham gia' })
+  @ApiOperation({
+    summary:
+      'Các cuộc họp đang diễn ra hoặc đã lên lịch mà tôi tham gia (có scheduledAt nếu đã lên lịch)',
+  })
   listMine(@CurrentUser() user: MeetingUser) {
     return this.meetings.listMine(user);
   }

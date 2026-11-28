@@ -17,12 +17,14 @@ import { UsersModule } from './users/users.module';
       envFilePath: envFilePaths(),
       validate: validateEnv,
     }),
-    // Migration sở hữu schema (npm run migration:run); ứng dụng không synchronize.
+    // synchronize: khi khởi động, TypeORM sửa schema theo entity. Mọi ràng buộc (check, unique, khóa ngoại)
+    // phải khai báo trong entity cùng tên với migration, nếu không synchronize sẽ xoá chúng.
+    // Kiểm tra trước khi đổi entity: schemaBuilder.log() chỉ được ra các câu ADD mong muốn.
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         ...databaseOptions(),
         entities: MEETING_ENTITIES,
-        synchronize: false,
+        synchronize: true,
       }),
     }),
     MeetingsModule,

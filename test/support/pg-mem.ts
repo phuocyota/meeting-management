@@ -28,6 +28,11 @@ export async function createTestDataSource(): Promise<DataSource> {
     returns: DataType.text,
     implementation: () => null,
   });
+  // pg-mem bỏ qua WHERE của unique index một phần (uq_meeting_members_host) nên coi meeting_id là duy nhất
+  // và tra cứu sai dòng. Bỏ index này khi test; ràng buộc đã được kiểm ở migration spec (PGlite).
+  db.public.interceptQueries((sql) =>
+    /CREATE UNIQUE INDEX "uq_meeting_members_host"/.test(sql) ? [] : null,
+  );
   const dataSource = db.adapters.createTypeormDataSource({
     type: 'postgres',
     entities: MEETING_ENTITIES,

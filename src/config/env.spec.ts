@@ -3,6 +3,7 @@ import {
   databaseOptions,
   envFilePaths,
   liveKitWebhookCredentials,
+  meetingJoinUrl,
   validateEnv,
 } from './env';
 
@@ -101,5 +102,19 @@ describe('env', () => {
         'di_ichi_crm',
       ).database,
     ).toBe('meeting_override');
+  });
+
+  it('link cuộc họp theo MEETING_FE_URL; URL sai thì dừng khởi động', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(meetingJoinUrl(id, {})).toBeNull();
+    expect(
+      meetingJoinUrl(id, { MEETING_FE_URL: ' https://meet.example.com// ' }),
+    ).toBe(`https://meet.example.com/meeting/${id}`);
+    expect(() => validateEnv({ MEETING_FE_URL: 'meet.example.com' })).toThrow(
+      /MEETING_FE_URL/,
+    );
+    expect(() =>
+      validateEnv({ MEETING_FE_URL: 'https://meet.example.com' }),
+    ).not.toThrow();
   });
 });

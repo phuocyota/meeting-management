@@ -11,7 +11,7 @@ import { DataSource, type EntityManager, In } from 'typeorm';
 import { isGuest, type MeetingUser } from '../auth/auth.types';
 import { signToken } from '../auth/tokens';
 import { UserEntity } from '../database/entities/user.entity';
-import { numberEnv } from '../config/env';
+import { meetingJoinUrl, numberEnv } from '../config/env';
 import {
   isAdminRole,
   MeetingMemberEntity,
@@ -25,7 +25,11 @@ import {
   type TrackInfo,
 } from 'livekit-server-sdk';
 import { LiveKitService, type MuteKind } from '../livekit/livekit.service';
-import type { CreateMeetingDto } from './dto/create-meeting.dto';
+import {
+  MAX_SCHEDULE_AHEAD_MS,
+  type CreateMeetingDto,
+  type ScheduleMeetingDto,
+} from './dto/create-meeting.dto';
 import {
   SETTING_KEYS,
   type UpdateSettingsDto,
@@ -45,6 +49,10 @@ export interface MeetingView {
   maxParticipants: number;
   status: MeetingEntity['status'];
   settings: MeetingSettings;
+  /** Giờ bắt đầu đã hẹn; null nếu họp ngay. */
+  scheduledAt: Date | null;
+  /** Link vào cuộc họp trên FE (`MEETING_FE_URL`/meeting/:id); null nếu chưa cấu hình. */
+  joinUrl: string | null;
   createdAt: Date;
   endedAt: Date | null;
   myRole: MeetingRole | null;
@@ -106,7 +114,8 @@ export type JoinResult =
       role: MeetingRole;
     }
   | {
-      status: 'pending' | 'denied' | 'kicked' | 'locked';
+      /** not_started: cuộc họp đã lên lịch nhưng chưa tới giờ (xem meeting.scheduledAt). */
+      status: 'pending' | 'denied' | 'kicked' | 'locked' | 'not_started';
       meeting: MeetingView;
     };
 
@@ -134,6 +143,41 @@ export class MeetingsService {
   ) {}
 
   async create(user: MeetingUser, dto: CreateMeetingDto): Promise<JoinResult> {
+    const { meeting, host } = await this.insertMeeting(user, dto, {
+      waitingRoom: dto.waitingRoom ?? true,
+      scheduledAt: null,
+    });
+    return this.admittedResult(meeting, host);
+  }
+
+  /**
+   * Lên lịch họp: chưa tạo phòng LiveKit, chưa cấp token. Trước giờ hẹn chỉ chủ trì/đồng chủ trì vào
+   * được (để chuẩn bị); tới giờ thì ai có link cũng vào thẳng vì cuộc họp không có phòng chờ.
+   */
+  async schedule(
+    user: MeetingUser,
+    dto: ScheduleMeetingDto,
+  ): Promise<MeetingView> {
+    const scheduledAt = new Date(dto.scheduledAt);
+    const now = Date.now();
+    if (Number.isNaN(+scheduledAt) || +scheduledAt <= now) {
+      throw new BadRequestException('Giờ bắt đầu phải ở tương lai');
+    }
+    if (+scheduledAt > now + MAX_SCHEDULE_AHEAD_MS) {
+      throw new BadRequestException('Chỉ lên lịch trước tối đa 1 năm');
+    }
+    const { meeting, host } = await this.insertMeeting(user, dto, {
+      waitingRoom: false,
+      scheduledAt,
+    });
+    return toMeetingView(meeting, host);
+  }
+
+  private async insertMeeting(
+    user: MeetingUser,
+    dto: Omit<CreateMeetingDto, 'waitingRoom'>,
+    options: { waitingRoom: boolean; scheduledAt: Date | null },
+  ) {
     if (isGuest(user)) {
       throw new ForbiddenException('Khách không được tạo cuộc họp');
     }
@@ -143,7 +187,7 @@ export class MeetingsService {
     const now = new Date();
     const id = randomUUID();
 
-    const { meeting, host } = await this.dataSource.transaction(async (m) => {
+    return this.dataSource.transaction(async (m) => {
       const coHosts = coHostIds.length
         ? await m.getRepository(UserEntity).findBy({ id: In(coHostIds) })
         : [];
@@ -158,7 +202,8 @@ export class MeetingsService {
           roomName: meetingRoomName(id),
           title: dto.title,
           hostId: user.userId,
-          waitingRoom: dto.waitingRoom ?? true,
+          waitingRoom: options.waitingRoom,
+          scheduledAt: options.scheduledAt,
           maxParticipants:
             dto.maxParticipants ??
             Math.min(500, numberEnv('LIVEKIT_ROOM_MAX_PARTICIPANTS', 100)),
@@ -196,7 +241,6 @@ export class MeetingsService {
       }
       return { meeting, host };
     });
-    return this.admittedResult(meeting, host);
   }
 
   /** Cuộc họp đang diễn ra mà người dùng là thành viên đã được vào. */
@@ -242,10 +286,26 @@ export class MeetingsService {
         member.displayName = user.name;
         member = await members.save(member);
       }
+      // Chưa tới giờ hẹn: chỉ admin vào trước; người khác không tạo dòng thành viên, tới giờ gọi lại.
+      if (notStarted(meeting) && !isAdminRole(member?.role)) {
+        return {
+          meeting,
+          member,
+          requested,
+          adminIds: [],
+          blocked: 'not_started' as const,
+        };
+      }
       if (!member) {
         // Khóa phòng chỉ chặn người mới; không tạo dòng thành viên để mở khóa xong xin vào lại được.
         if (meeting.locked)
-          return { meeting, member: null, requested, adminIds: [] };
+          return {
+            meeting,
+            member: null,
+            requested,
+            adminIds: [],
+            blocked: 'locked' as const,
+          };
         const now = new Date();
         member = await members.save(
           members.create({
@@ -263,12 +323,15 @@ export class MeetingsService {
         requested = member.status === 'pending';
       }
       const adminIds = requested ? await this.adminIds(m, id) : [];
-      return { meeting, member, requested, adminIds };
+      return { meeting, member, requested, adminIds, blocked: null };
     });
 
     const { meeting, member } = outcome;
-    if (!member) {
-      return { status: 'locked', meeting: toMeetingView(meeting, null) };
+    if (outcome.blocked || !member) {
+      return {
+        status: outcome.blocked ?? 'locked',
+        meeting: toMeetingView(meeting, member),
+      };
     }
     if (outcome.requested) {
       await this.notify(
@@ -299,6 +362,14 @@ export class MeetingsService {
       .findOneBy({ id });
     if (!meeting) throw new NotFoundException(NOT_FOUND);
     if (meeting.status !== 'active') throw new NotFoundException(ENDED);
+    // Khách không bao giờ là admin: chưa tới giờ hẹn thì chưa cấp token khách.
+    if (notStarted(meeting)) {
+      return {
+        status: 'not_started' as const,
+        meeting: toMeetingView(meeting, null),
+        guest: null,
+      };
+    }
     if (meeting.locked) {
       return {
         status: 'locked' as const,
@@ -942,6 +1013,11 @@ export class MeetingsService {
   }
 }
 
+/** Cuộc họp đã lên lịch và chưa tới giờ bắt đầu. */
+function notStarted(meeting: MeetingEntity, now = new Date()) {
+  return meeting.scheduledAt !== null && meeting.scheduledAt > now;
+}
+
 function muteKinds(input: { audio?: boolean; video?: boolean }): MuteKind[] {
   const kinds: MuteKind[] = [];
   if (input.audio ?? true) kinds.push('audio');
@@ -1021,6 +1097,8 @@ function toMeetingView(
     maxParticipants: meeting.maxParticipants,
     status: meeting.status,
     settings: toSettings(meeting),
+    scheduledAt: meeting.scheduledAt,
+    joinUrl: meetingJoinUrl(meeting.id),
     createdAt: meeting.createdAt,
     endedAt: meeting.endedAt,
     myRole: member?.role ?? null,
